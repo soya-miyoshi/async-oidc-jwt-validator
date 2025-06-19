@@ -50,7 +50,7 @@
 
 use jsonwebtoken::errors::{Error as JwtError, ErrorKind, Result as JwtResult};
 use jsonwebtoken::jwk::{Jwk, JwkSet};
-use jsonwebtoken::{decode, DecodingKey};
+use jsonwebtoken::{decode, Algorithm, DecodingKey};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -156,10 +156,7 @@ impl OidcValidator {
     }
 
     async fn fetch_jwks(&self) -> JwtResult<JwkSet> {
-        let jwks_url = self
-            .config
-            .jwks_uri
-            .clone();
+        let jwks_url = self.config.jwks_uri.clone();
 
         log::debug!("Fetching JWKS from: {}", jwks_url);
 
@@ -207,16 +204,7 @@ impl OidcValidator {
             .ok_or_else(|| JwtError::from(ErrorKind::InvalidToken))
     }
 
-    /// Verifies a JWT token and returns the claims if valid
-    ///
-    /// # Arguments
-    /// * `token` - The JWT token string to verify
-    /// * `validation` - User-provided validation settings
-    ///
-    /// # Returns
-    /// * `Ok(T)` - The decoded claims if the token is valid
-    /// * `Err(JwtError)` - If the token is invalid or verification fails
-    pub async fn verify_token<T>(&self, token: &str, validation: &Validation) -> JwtResult<T>
+    pub async fn validate_custom<T>(&self, token: &str, validation: &Validation) -> JwtResult<T>
     where
         T: for<'de> Deserialize<'de>,
     {
@@ -248,6 +236,20 @@ impl OidcValidator {
 
         log::debug!("Token verified successfully");
         Ok(token_data.claims)
+    }
+
+    pub async fn validate<T>(&self, token: &str) -> JwtResult<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        log::debug!("Validating JWT token with minimal validation");
+
+        // Create a minimal validation configuration
+        let mut validation = Validation::new(Algorithm::RS256);
+        validation.set_issuer(&[&self.config.issuer_url]);
+        validation.set_audience(&[&self.config.client_id]);
+
+        self.validate_custom(token, &validation).await
     }
 
     /// Refreshes the JWKS cache by fetching the latest keys
