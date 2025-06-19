@@ -18,12 +18,19 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Generic OIDC configuration
+//!     // Generic OIDC configuration with automatic discovery
 //!     let config = OidcConfig::new(
 //!         "https://your-oidc-provider.com".to_string(),
 //!         "your-client-id".to_string()
-//!     ).with_jwks_uri("https://your-oidc-provider.com/.well-known/jwks.json".to_string());
+//!     ).with_discovery().await?;
 //!     let validator = OidcValidator::new(config);
+//!     
+//!     // Or manually specify JWKS URI:
+//!     // let config = OidcConfig::new(
+//!     //     "https://your-oidc-provider.com".to_string(),
+//!     //     "your-client-id".to_string()
+//!     // ).with_jwks_uri("https://your-oidc-provider.com/.well-known/jwks.json".to_string());
+//!     // let validator = OidcValidator::new(config);
 //!     
 //!     // Set up validation with your requirements
 //!     let mut validation = Validation::new(Algorithm::RS256);
@@ -43,20 +50,26 @@
 
 use jsonwebtoken::errors::{Error as JwtError, ErrorKind, Result as JwtResult};
 use jsonwebtoken::jwk::{Jwk, JwkSet};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
+use jsonwebtoken::{decode, DecodingKey};
+use serde::Deserialize;
 use std::collections::HashMap;
 
 // Re-export for user convenience
 pub use jsonwebtoken::Validation;
 
+/// OpenID Connect Discovery document structure
+#[derive(Debug, Deserialize)]
+struct OidcDiscovery {
+    issuer: String,
+    jwks_uri: String,
+}
 
 /// Configuration for OIDC authentication
 #[derive(Debug, Clone)]
 pub struct OidcConfig {
     pub issuer_url: String,
     pub client_id: String,
-    pub jwks_uri: Option<String>,
+    pub jwks_uri: String,
 }
 
 /// OIDC JWT validator with JWKS caching
@@ -67,20 +80,69 @@ pub struct OidcValidator {
 }
 
 impl OidcConfig {
-    
     /// Creates a new OidcConfig with custom parameters
-    pub fn new(issuer_url: String, client_id: String) -> Self {
+    pub fn new(issuer_url: String, client_id: String, jwks_uri: String) -> Self {
         Self {
             issuer_url,
             client_id,
-            jwks_uri: None,
+            jwks_uri: jwks_uri,
         }
     }
-    
-    /// Sets a custom JWKS URI
-    pub fn with_jwks_uri(mut self, jwks_uri: String) -> Self {
-        self.jwks_uri = Some(jwks_uri);
-        self
+
+    pub async fn new_with_discovery(issuer_url: String, client_id: String) -> JwtResult<Self> {
+        let jwks_uri = Self::discover_jwks_uri(&issuer_url).await?;
+        Ok(Self {
+            issuer_url,
+            client_id,
+            jwks_uri: jwks_uri,
+        })
+    }
+
+    async fn discover_jwks_uri(issuer_url: &str) -> JwtResult<String> {
+        let discovery_url = format!("{}/.well-known/openid-configuration", issuer_url);
+
+        log::debug!("Fetching OpenID Connect Discovery from: {}", discovery_url);
+
+        let response = reqwest::get(&discovery_url).await.map_err(|e| {
+            JwtError::from(ErrorKind::InvalidRsaKey(format!(
+                "Failed to fetch OIDC discovery document: {}",
+                e
+            )))
+        })?;
+
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+
+        if !content_type.starts_with("application/json") {
+            return Err(JwtError::from(ErrorKind::InvalidRsaKey(format!(
+                "Unexpected Content-Type: '{}', expected 'application/json'",
+                content_type
+            ))));
+        }
+
+        if !response.status().is_success() {
+            return Err(JwtError::from(ErrorKind::InvalidRsaKey(format!(
+                "OIDC discovery request failed with status: {}",
+                response.status()
+            ))));
+        }
+
+        let discovery: OidcDiscovery = response.json().await.map_err(|e| {
+            JwtError::from(ErrorKind::InvalidRsaKey(format!(
+                "Failed to parse OIDC discovery response: {}",
+                e
+            )))
+        })?;
+
+        if discovery.issuer != issuer_url {
+            return Err(JwtError::from(ErrorKind::InvalidIssuer));
+        }
+
+        log::debug!("Discovered JWKS URI: {}", discovery.jwks_uri);
+        Ok(discovery.jwks_uri)
     }
 }
 
@@ -94,9 +156,10 @@ impl OidcValidator {
     }
 
     async fn fetch_jwks(&self) -> JwtResult<JwkSet> {
-        let jwks_url = self.config.jwks_uri.as_ref()
-            .map(|uri| uri.clone())
-            .unwrap_or_else(|| format!("{}/.well-known/jwks.json", self.config.issuer_url));
+        let jwks_url = self
+            .config
+            .jwks_uri
+            .clone();
 
         log::debug!("Fetching JWKS from: {}", jwks_url);
 
@@ -138,21 +201,22 @@ impl OidcValidator {
         self.refresh_jwks_cache().await?;
 
         let cache = self.jwks_cache.read().await;
-        cache.get(kid).cloned().ok_or_else(|| {
-            JwtError::from(ErrorKind::InvalidToken)
-        })
+        cache
+            .get(kid)
+            .cloned()
+            .ok_or_else(|| JwtError::from(ErrorKind::InvalidToken))
     }
 
     /// Verifies a JWT token and returns the claims if valid
-    /// 
+    ///
     /// # Arguments
     /// * `token` - The JWT token string to verify
     /// * `validation` - User-provided validation settings
-    /// 
+    ///
     /// # Returns
     /// * `Ok(T)` - The decoded claims if the token is valid
     /// * `Err(JwtError)` - If the token is invalid or verification fails
-    pub async fn verify_token<T>(&self, token: &str, validation: &Validation) -> JwtResult<T> 
+    pub async fn verify_token<T>(&self, token: &str, validation: &Validation) -> JwtResult<T>
     where
         T: for<'de> Deserialize<'de>,
     {
@@ -239,4 +303,3 @@ impl OidcValidator {
         Ok(())
     }
 }
-
