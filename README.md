@@ -3,6 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/async-oidc-jwt-validator.svg)](https://crates.io/crates/async-oidc-jwt-validator)
 [![Docs.rs](https://docs.rs/async-oidc-jwt-validator/badge.svg)](https://docs.rs/async-oidc-jwt-validator)
 [![CI](https://github.com/soya-miyoshi/async-oidc-jwt-validator/workflows/CI/badge.svg)](https://github.com/soya-miyoshi/async-oidc-jwt-validator/actions)
+[![Rust GitHub Template](https://img.shields.io/badge/Rust%20GitHub-Template-blue)](https://rust-github.github.io/)
 
 A fast, secure, and easy-to-use Rust crate for validating OpenID Connect (OIDC) JWTs.
 
