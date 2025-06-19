@@ -5,41 +5,50 @@
 //! ## Example
 //!
 //! ```no_run
-//! use async_oidc_jwt_validator::{OidcValidator, OidcConfig};
-//! use jsonwebtoken::{Validation, Algorithm};
+//! use async_oidc_jwt_validator::{OidcValidator, OidcConfig, Validation, Algorithm};
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Deserialize, Serialize)]
 //! struct MyClaims {
-//!     sub: String,
-//!     exp: usize,
+//!     pub sub: String,
+//!     pub exp: usize,
+//!     pub iat: usize,
+//!     pub aud: serde_json::Value,
+//!     pub iss: String,
 //!     // Add your custom fields here
 //! }
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Generic OIDC configuration with automatic discovery
-//!     let config = OidcConfig::new(
+//!     // OIDC configuration with automatic discovery
+//!     let config = OidcConfig::new_with_discovery(
 //!         "https://your-oidc-provider.com".to_string(),
 //!         "your-client-id".to_string()
-//!     ).with_discovery().await?;
+//!     ).await?;
 //!     let validator = OidcValidator::new(config);
 //!     
 //!     // Or manually specify JWKS URI:
 //!     // let config = OidcConfig::new(
 //!     //     "https://your-oidc-provider.com".to_string(),
-//!     //     "your-client-id".to_string()
-//!     // ).with_jwks_uri("https://your-oidc-provider.com/.well-known/jwks.json".to_string());
+//!     //     "your-client-id".to_string(),
+//!     //     "https://your-oidc-provider.com/.well-known/jwks.json".to_string()
+//!     // );
 //!     // let validator = OidcValidator::new(config);
 //!     
-//!     // Set up validation with your requirements
+//!     let token = "your-jwt-token-here";
+//!     
+//!     // Simple validation with default settings
+//!     match validator.validate::<MyClaims>(token).await {
+//!         Ok(claims) => println!("Valid token for user: {}", claims.sub),
+//!         Err(e) => println!("Invalid token: {}", e),
+//!     }
+//!     
+//!     // Or custom validation
 //!     let mut validation = Validation::new(Algorithm::RS256);
 //!     validation.set_issuer(&["https://your-oidc-provider.com"]);
 //!     validation.set_audience(&["your-client-id"]);
 //!     
-//!     let token = "your-jwt-token-here";
-//!     
-//!     match validator.verify_token::<MyClaims>(token, &validation).await {
+//!     match validator.validate_custom::<MyClaims>(token, &validation).await {
 //!         Ok(claims) => println!("Valid token for user: {}", claims.sub),
 //!         Err(e) => println!("Invalid token: {}", e),
 //!     }
@@ -50,12 +59,12 @@
 
 use jsonwebtoken::errors::{Error as JwtError, ErrorKind, Result as JwtResult};
 use jsonwebtoken::jwk::{Jwk, JwkSet};
-use jsonwebtoken::{decode, Algorithm, DecodingKey};
+use jsonwebtoken::{decode, DecodingKey};
 use serde::Deserialize;
 use std::collections::HashMap;
 
 // Re-export for user convenience
-pub use jsonwebtoken::Validation;
+pub use jsonwebtoken::{Algorithm, Validation};
 
 /// OpenID Connect Discovery document structure
 #[derive(Debug, Deserialize)]
@@ -223,13 +232,8 @@ impl OidcValidator {
 
         log::debug!("Found matching key with kid: {}", kid);
 
-        // Create decoding key from JWK
-        let decoding_key = DecodingKey::from_jwk(&jwk).map_err(|e| {
-            JwtError::from(ErrorKind::InvalidRsaKey(format!(
-                "Failed to create decoding key from JWK: {}",
-                e
-            )))
-        })?;
+        let decoding_key = DecodingKey::from_jwk(&jwk)
+            .map_err(|_e| JwtError::from(ErrorKind::InvalidKeyFormat))?;
 
         // Decode and validate token
         let token_data = decode::<T>(token, &decoding_key, &validation)?;
