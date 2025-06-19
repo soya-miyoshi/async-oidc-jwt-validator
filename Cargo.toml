@@ -2,10 +2,20 @@
 name = "async-oidc-jwt-validator"
 version = "0.1.0"
 edition = "2021"
-description = "OIDC"
+description = "Asynchronous OIDC JWT validator with JWKS caching for Keycloak and other OIDC providers"
 repository = "https://github.com/soya-miyoshi/async-oidc-jwt-validator"
-license = "MIT OR Apache-2.0"
+license = "MIT"
+authors = ["soya-miyoshi"]
+keywords = ["oidc", "jwt", "authentication", "keycloak", "async"]
+categories = ["authentication", "web-programming"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+jsonwebtoken = "9"
+tokio = { version = "1.45", features = ["sync"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
