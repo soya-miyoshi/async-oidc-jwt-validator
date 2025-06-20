@@ -26,6 +26,7 @@ pub struct OidcConfig {
 #[derive(Clone)]
 pub struct OidcValidator {
     config: OidcConfig,
+    check_issuer: bool,
     jwks_cache: std::sync::Arc<tokio::sync::RwLock<HashMap<String, Jwk>>>,
 }
 
@@ -101,8 +102,15 @@ impl OidcValidator {
     pub fn new(config: OidcConfig) -> Self {
         Self {
             config,
+            check_issuer: false,
             jwks_cache: std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Enables issuer validation for JWT tokens
+    pub fn with_issuer_check(mut self) -> Self {
+        self.check_issuer = true;
+        self
     }
 
     async fn fetch_jwks(&self) -> JwtResult<JwkSet> {
@@ -191,7 +199,12 @@ impl OidcValidator {
 
         // Create a minimal validation configuration
         let mut validation = Validation::new(Algorithm::RS256);
-        validation.set_issuer(&[&self.config.issuer_url]);
+
+        // Only validate issuer if check_issuer is true
+        if self.check_issuer {
+            validation.set_issuer(&[&self.config.issuer_url]);
+        }
+
         validation.set_audience(&[&self.config.client_id]);
 
         self.validate_custom(token, &validation).await
