@@ -1,6 +1,6 @@
 [package]
 name = "async-oidc-jwt-validator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Asynchronous OIDC JWT validator with JWKS caching for Keycloak and other OIDC providers"
 repository = "https://github.com/soya-miyoshi/async-oidc-jwt-validator"

@@ -37,7 +37,7 @@ Steps to reproduce the behavior:
 <!-- Please fill the following information. -->
 
 - OS: [e.g. Ubuntu 20.04]
-- async-oidc-jwt-validator version: [e.g. 0.1.0]
+- async-oidc-jwt-validator version: [e.g. 0.1.1]
 
 ## Additional context
 

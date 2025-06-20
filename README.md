@@ -27,7 +27,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-async-oidc-jwt-validator = "0.1.0"
+async-oidc-jwt-validator = "0.1.1"
 ```
 
 ## Usage
