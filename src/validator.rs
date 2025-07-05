@@ -24,12 +24,11 @@ impl OidcValidator {
     async fn fetch_jwks(&self) -> JwtResult<JwkSet> {
         let jwks_url = self.config.jwks_uri.clone();
 
-        log::debug!("Fetching JWKS from: {}", jwks_url);
+        log::debug!("Fetching JWKS from: {jwks_url}");
 
         let response = reqwest::get(&jwks_url).await.map_err(|e| {
             JwtError::from(ErrorKind::InvalidRsaKey(format!(
-                "Failed to fetch JWKS: {}",
-                e
+                "Failed to fetch JWKS: {e}"
             )))
         })?;
 
@@ -42,8 +41,7 @@ impl OidcValidator {
 
         let jwks: JwkSet = response.json().await.map_err(|e| {
             JwtError::from(ErrorKind::InvalidRsaKey(format!(
-                "Failed to parse JWKS response: {}",
-                e
+                "Failed to parse JWKS response: {e}"
             )))
         })?;
 
@@ -82,12 +80,12 @@ impl OidcValidator {
         let kid = header
             .kid
             .ok_or_else(|| JwtError::from(ErrorKind::InvalidToken))?;
-        log::debug!("Token kid: {}", kid);
+        log::debug!("Token kid: {kid}");
 
         // Get JWK for this kid (will refresh cache if not found)
         let jwk = self.get_jwk(&kid).await?;
 
-        log::debug!("Found matching key with kid: {}", kid);
+        log::debug!("Found matching key with kid: {kid}");
 
         let decoding_key = DecodingKey::from_jwk(&jwk)
             .map_err(|_e| JwtError::from(ErrorKind::InvalidKeyFormat))?;
@@ -151,7 +149,7 @@ impl OidcValidator {
             let mut new_cache = HashMap::new();
             for jwk in new_jwks.keys {
                 if let Some(kid) = jwk.common.key_id.clone() {
-                    log::debug!("Adding key to new cache: {}", kid);
+                    log::debug!("Adding key to new cache: {kid}");
                     new_cache.insert(kid, jwk);
                 }
             }

@@ -35,14 +35,13 @@ impl OidcConfig {
     }
 
     async fn discover_jwks_uri(issuer_url: &str) -> JwtResult<String> {
-        let discovery_url = format!("{}/.well-known/openid-configuration", issuer_url);
+        let discovery_url = format!("{issuer_url}/.well-known/openid-configuration");
 
-        log::debug!("Fetching OpenID Connect Discovery from: {}", discovery_url);
+        log::debug!("Fetching OpenID Connect Discovery from: {discovery_url}");
 
         let response = reqwest::get(&discovery_url).await.map_err(|e| {
             JwtError::from(ErrorKind::InvalidRsaKey(format!(
-                "Failed to fetch OIDC discovery document: {}",
-                e
+                "Failed to fetch OIDC discovery document: {e}"
             )))
         })?;
 
@@ -54,8 +53,7 @@ impl OidcConfig {
 
         if !content_type.starts_with("application/json") {
             return Err(JwtError::from(ErrorKind::InvalidRsaKey(format!(
-                "Unexpected Content-Type: '{}', expected 'application/json'",
-                content_type
+                "Unexpected Content-Type: '{content_type}', expected 'application/json'"
             ))));
         }
 
@@ -68,8 +66,7 @@ impl OidcConfig {
 
         let discovery: OidcDiscovery = response.json().await.map_err(|e| {
             JwtError::from(ErrorKind::InvalidRsaKey(format!(
-                "Failed to parse OIDC discovery response: {}",
-                e
+                "Failed to parse OIDC discovery response: {e}"
             )))
         })?;
 
